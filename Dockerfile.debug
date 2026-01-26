@@ -1,0 +1,43 @@
+# Dockerfile.debug
+FROM golang:1.25-alpine AS builder
+
+ARG ENV=local
+
+WORKDIR /app
+
+# Install delve debugger
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# Build with debug symbols (no optimization, include debug info)
+RUN CGO_ENABLED=0 GOOS=linux go build -gcflags="all=-N -l" -o server cmd/server/main.go
+
+# Runtime stage for debugging
+FROM alpine:latest
+
+ARG ENV=local
+ENV ENV=${ENV}
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /root/
+
+# Copy delve debugger
+COPY --from=builder /go/bin/dlv .
+
+# Copy binary with debug symbols
+COPY --from=builder /app/server .
+
+# Copy env file
+COPY --from=builder /app/deploy/${ENV}.env ./.env
+
+# Expose application port and delve port
+EXPOSE 8080
+EXPOSE 2345
+
+# Run with delve
+CMD sh -c 'export $(cat .env | grep -v "^#" | xargs) && ./dlv exec ./server --headless --listen=:2345 --api-version=2 --accept-multiclient --continue'
