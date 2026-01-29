@@ -56,6 +56,15 @@ func (r Router) setupUserRoutes(rg *gin.RouterGroup) {
 		// Get crawl by filters
 		crawl.GET("", r.userHandler.GetCrawl)
 	}
+
+	recipe := rg.Group("/recipe")
+	{
+		recipe.POST("/from-path", r.userHandler.ProcessRecipeFromPage)
+
+		recipe.GET("/search", r.userHandler.SearchRecipes)
+
+		recipe.GET("/:id", r.userHandler.GetRecipeByID)
+	}
 }
 
 // healthCheck is a simple health check endpoint

@@ -21,7 +21,10 @@ func NewLinksRepo(db *sqlx.DB) LinksRepo {
 }
 
 func (l linksRepo) SaveLink(ctx context.Context, link entity.Link) error {
-	query := `INSERT INTO links (from_url, to_url, crawl_id) VALUES (:from_url, :to_url, :crawl_id);`
+	query := `INSERT INTO links (from_url, to_url, crawl_id) 
+			      VALUES 
+			  (:from_url, :to_url, :crawl_id)
+			      ON CONFLICT (from_url, to_url) DO NOTHING;`
 
 	_, err := l.db.NamedExecContext(ctx, query, link)
 	if err != nil {

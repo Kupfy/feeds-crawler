@@ -18,6 +18,7 @@ import (
 	"github.com/Kupfy/feeds-crawler/internal/data/dto"
 	"github.com/Kupfy/feeds-crawler/internal/data/entity"
 	"github.com/Kupfy/feeds-crawler/internal/data/enum/crawlstatus"
+	"github.com/Kupfy/feeds-crawler/internal/messaging"
 	"github.com/Kupfy/feeds-crawler/internal/repository"
 	"github.com/Kupfy/feeds-crawler/internal/util"
 	"github.com/PuerkitoBio/goquery"
@@ -29,6 +30,7 @@ import (
 type crawlJob struct {
 	entity.Crawl
 	Sitemap map[string][]string
+	Visited *sync.Map
 	Mu      sync.Mutex
 }
 
@@ -38,14 +40,13 @@ type CrawlerService interface {
 }
 
 type crawlerService struct {
-	cfg          config.ServiceConfig
-	crawlRepo    repository.CrawlsRepo
-	siteRepo     repository.SiteRepo
-	pageRepo     repository.PagesRepo
-	linksRepo    repository.LinksRepo
-	requestTimes map[uuid.UUID]int
-	//Mu        sync.Mutex
-	//jobs      map[uuid.UUID]*crawlJob
+	cfg       config.ServiceConfig
+	crawlRepo repository.CrawlsRepo
+	siteRepo  repository.SiteRepo
+	pageRepo  repository.PagesRepo
+	linksRepo repository.LinksRepo
+	queue     messaging.RedisQueue
+	//requestTimes *sync.Map
 }
 
 func NewCrawlerService(
@@ -54,16 +55,17 @@ func NewCrawlerService(
 	siteRepo repository.SiteRepo,
 	pageRepo repository.PagesRepo,
 	linksRepo repository.LinksRepo,
+	queue messaging.RedisQueue,
 ) CrawlerService {
-	requestTimes := make(map[uuid.UUID]int)
+	//requestTimes := sync.Map{}
 	return &crawlerService{
-		cfg:          cfg,
-		crawlRepo:    crawlRepo,
-		siteRepo:     siteRepo,
-		pageRepo:     pageRepo,
-		linksRepo:    linksRepo,
-		requestTimes: requestTimes,
-		//jobs:      make(map[uuid.UUID]*crawlJob),
+		cfg:       cfg,
+		crawlRepo: crawlRepo,
+		siteRepo:  siteRepo,
+		pageRepo:  pageRepo,
+		linksRepo: linksRepo,
+		queue:     queue,
+		//requestTimes: &requestTimes,
 	}
 }
 
@@ -107,8 +109,8 @@ func (s *crawlerService) StartCrawl(ctx context.Context, req dto.StartCrawlReque
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to create crawl job: %w", err)
 	}
-
-	job := crawlJob{Crawl: cj, Sitemap: map[string][]string{}, Mu: sync.Mutex{}}
+	visited := sync.Map{}
+	job := crawlJob{Crawl: cj, Sitemap: map[string][]string{}, Visited: &visited, Mu: sync.Mutex{}}
 
 	go func() {
 		// Use context.Background() to ensure the job completes
@@ -175,8 +177,7 @@ func (s *crawlerService) runJob(ctx context.Context, job *crawlJob, req dto.Star
 	}
 
 	// Setup callbacks
-	visited := &sync.Map{}
-	s.setupCollectorCallbacks(ctx, c, job, visited, req.ExcludedPathSegments)
+	s.setupCollectorCallbacks(ctx, c, job, req.ExcludedPathSegments)
 
 	// Create queue
 	q, err := queue.New(concurrency, &util.InMemoryQueueBackend{})
@@ -318,10 +319,12 @@ func (s *crawlerService) configureRateLimiting(c *colly.Collector, rate float64,
 }
 
 func (s *crawlerService) setupCollectorCallbacks(ctx context.Context,
-	c *colly.Collector, job *crawlJob, visited *sync.Map, excludedSegments []string,
+	c *colly.Collector, job *crawlJob, excludedSegments []string,
 ) {
-	c.OnRequest(func(r *colly.Request) {
-		//log.Printf("[job %s] crawling: %s (depth=%d)\n", job.ID, r.URL.String(), r.Depth)
+	c.OnRequestHeaders(func(r *colly.Request) {
+		//if r.URL != nil {
+		//	s.requestTimes.Store(r.URL.String(), time.Now())
+		//}
 	})
 
 	c.OnError(func(r *colly.Response, err error) {
@@ -332,18 +335,18 @@ func (s *crawlerService) setupCollectorCallbacks(ctx context.Context,
 
 	c.OnResponse(func(r *colly.Response) {
 		u := r.Request.URL.String()
+		//if startTime, ok := s.requestTimes.LoadAndDelete(u); ok {
+		//	duration := time.Since(startTime.(time.Time))
+		//	log.Printf("[url %s] response took %v", u, duration)
+		//}
 
-		if _, loaded := visited.LoadOrStore(u, true); loaded {
-			return
-		}
-
-		doc, err := parseHTML(r.Body)
-		var textContent string
-		if err != nil {
-			log.Printf("[job %s] HTML parse error for %s: %v\n", job.ID, u, err)
-		} else {
-			textContent = doc.Text()
-		}
+		//doc, err := parseHTML(r.Body)
+		//var textContent string
+		//if err != nil {
+		//	log.Printf("[job %s] HTML parse error for %s: %v\n", job.ID, u, err)
+		//} else {
+		//	textContent = doc.Text()
+		//}
 
 		parentURL := r.Request.Headers.Get("Referer")
 
@@ -354,8 +357,8 @@ func (s *crawlerService) setupCollectorCallbacks(ctx context.Context,
 			ParentURL:  parentURL,
 			Depth:      r.Request.Depth,
 			HTML:       string(r.Body),
-			Text:       textContent,
-			Status:     crawlstatus.Running,
+			//Text:       textContent,
+			Status: crawlstatus.Running,
 			Meta: map[string]any{
 				"content_type": r.Headers.Get("Content-Type"),
 				"status_code":  r.StatusCode,
@@ -365,6 +368,10 @@ func (s *crawlerService) setupCollectorCallbacks(ctx context.Context,
 
 		if err := s.pageRepo.SavePage(ctx, page); err != nil {
 			log.Printf("[job %s] storage save error for %s: %v\n", job.ID, u, err)
+		}
+		err := s.queue.Enqueue(ctx, u)
+		if err != nil {
+			log.Printf("[job %s] failed to enqueue %s: %v\n", job.ID, u, err)
 		}
 	})
 
@@ -391,15 +398,12 @@ func (s *crawlerService) setupCollectorCallbacks(ctx context.Context,
 		job.Mu.Unlock()
 
 		// Dedupe check
-		if _, ok := visited.Load(link); ok {
+		if _, loaded := job.Visited.LoadOrStore(link, true); loaded {
 			return
 		}
 		if isVisited, _ := s.pageRepo.IsVisited(ctx, link); isVisited {
 			return
 		}
-
-		// Mark as visited before crawling to avoid duplicates
-		visited.Store(link, true)
 
 		// Visit the link - this adds it to Colly's queue automatically
 		if err := e.Request.Visit(link); err != nil {
@@ -453,19 +457,12 @@ func (j *crawlJob) shouldFollowLink(link string, excludedSegments []string) bool
 }
 
 func (s *crawlerService) saveSitemap(ctx context.Context, job *crawlJob) error {
-	job.Mu.Lock()
-	sitemapCopy := make(map[string][]string, len(job.Sitemap))
-	for k, v := range job.Sitemap {
-		sitemapCopy[k] = append([]string(nil), v...)
-	}
-	job.Mu.Unlock()
-
 	if err := s.crawlRepo.UpdateCrawlStatus(ctx, job.ID, crawlstatus.Finished); err != nil {
 		return fmt.Errorf("failed to save Sitemap: %w", err)
 	}
 
 	log.Printf("[job %s] saved Sitemap: %d pages, %d links\n",
-		job.ID, len(sitemapCopy), countTotalLinks(sitemapCopy))
+		job.ID, len(job.Sitemap), countTotalLinks(job.Sitemap))
 	return nil
 }
 

@@ -1,32 +1,24 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/Kupfy/feeds-crawler/internal/data/config"
+	"github.com/Kupfy/feeds-crawler/internal/data/dto"
+	"github.com/Kupfy/feeds-crawler/internal/data/entity"
+	"github.com/Kupfy/feeds-crawler/internal/messaging"
+	"github.com/Kupfy/feeds-crawler/internal/repository"
+	"github.com/Kupfy/feeds-crawler/internal/util"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/google/uuid"
 )
-
-// Recipe represents structured recipe data
-type Recipe struct {
-	Title        string   `json:"title"`
-	Description  string   `json:"description"`
-	Ingredients  []string `json:"ingredients"`
-	Instructions []string `json:"instructions"`
-	PrepTime     string   `json:"prepTime,omitempty"`
-	CookTime     string   `json:"cookTime,omitempty"`
-	TotalTime    string   `json:"totalTime,omitempty"`
-	Servings     string   `json:"servings,omitempty"`
-	Cuisine      string   `json:"cuisine,omitempty"`
-	Category     string   `json:"category,omitempty"`
-	Author       string   `json:"author,omitempty"`
-	ImageURL     string   `json:"imageUrl,omitempty"`
-}
 
 // DomainPattern defines CSS selectors for a specific domain
 type DomainPattern struct {
@@ -43,22 +35,62 @@ type DomainPattern struct {
 }
 
 type RecipeService interface {
+	ProcessRecipeByUrl(ctx context.Context, url string) error
+	ProcessRecipeMessage(ctx context.Context)
 }
 
 type recipeService struct {
-	patterns map[string]DomainPattern
-	config   config.ServiceConfig
+	patterns    map[string]DomainPattern
+	config      config.ServiceConfig
+	recipesRepo repository.RecipesRepo
+	pagesRepo   repository.PagesRepo
+	queue       messaging.RedisQueue
 }
 
-func NewRecipeService(config config.ServiceConfig) RecipeService {
+func NewRecipeService(
+	config config.ServiceConfig, recipesRepo repository.RecipesRepo,
+	pagesRepo repository.PagesRepo, queue messaging.RedisQueue,
+) RecipeService {
 	return &recipeService{
-		patterns: initializeDomainPatterns(),
-		config:   config,
+		patterns:    initializeDomainPatterns(),
+		config:      config,
+		recipesRepo: recipesRepo,
+		pagesRepo:   pagesRepo,
+		queue:       queue,
 	}
 }
 
+func (s *recipeService) ProcessRecipeMessage(ctx context.Context) {
+	recipeJob, err := s.queue.Dequeue(ctx, s.config.QueueTimeout)
+	if err != nil {
+		log.Printf("Failed to dequeue message: %v", err)
+		return
+	}
+
+	if recipeJob == nil {
+		return
+	}
+
+	_ = s.ProcessRecipeByUrl(ctx, recipeJob.URL)
+}
+
+func (s *recipeService) ProcessRecipeByUrl(ctx context.Context, url string) error {
+	page, err := s.pagesRepo.GetPageByUrl(ctx, url)
+	if err != nil {
+		log.Printf("Failed to get page by URL: %v", err)
+		return err
+	}
+
+	_, err = s.extractRecipe(nil, page.HTML, page.URL)
+	if err != nil {
+		log.Printf("Failed to extract recipe: %v", err)
+		return err
+	}
+	return nil
+}
+
 // ExtractRecipe uses hybrid approach: Schema.org → Selectors → LLM fallback
-func (s *recipeService) ExtractRecipe(html string, pageURL string) (*Recipe, error) {
+func (s *recipeService) extractRecipe(ctx context.Context, html string, pageURL string) (*entity.Recipe, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse HTML: %w", err)
@@ -66,9 +98,10 @@ func (s *recipeService) ExtractRecipe(html string, pageURL string) (*Recipe, err
 
 	domain := extractDomain(pageURL)
 	log.Printf("Extracting recipe from domain: %s", domain)
+	var recipe *entity.Recipe
 
 	// Step 1: Try schema.org structured data (free, fast)
-	if recipe, err := s.extractFromSchema(doc); err == nil && recipe != nil {
+	if recipe, err = s.extractFromSchema(doc); err == nil && recipe != nil {
 		log.Printf("✓ Extracted recipe from schema.org: %s", recipe.Title)
 		return recipe, nil
 	}
@@ -92,12 +125,20 @@ func (s *recipeService) ExtractRecipe(html string, pageURL string) (*Recipe, err
 		return s.extractWithLLMFull(html)
 	}
 
+	if recipe != nil {
+		err = s.recipesRepo.SaveRecipe(ctx, *recipe)
+		if err != nil {
+			log.Printf("failed to save recipe: %w", err)
+		}
+		return recipe, err
+	}
+
 	return nil, errors.New("no extraction method succeeded")
 }
 
 // extractFromSchema extracts recipe from JSON-LD schema.org markup
-func (s *recipeService) extractFromSchema(doc *goquery.Document) (*Recipe, error) {
-	var recipe *Recipe
+func (s *recipeService) extractFromSchema(doc *goquery.Document) (*entity.Recipe, error) {
+	var recipe *entity.Recipe
 
 	doc.Find("script[type='application/ld+json']").Each(func(i int, script *goquery.Selection) {
 		if recipe != nil {
@@ -135,27 +176,32 @@ func (s *recipeService) extractFromSchema(doc *goquery.Document) (*Recipe, error
 }
 
 // parseSchemaRecipe parses a schema.org Recipe object
-func parseSchemaRecipe(data map[string]interface{}) *Recipe {
+func parseSchemaRecipe(data map[string]interface{}) *entity.Recipe {
 	schemaType, ok := data["@type"].(string)
 	if !ok || schemaType != "Recipe" {
 		return nil
 	}
 
-	recipe := &Recipe{}
+	recipe := &entity.Recipe{}
 
 	if title, ok := data["name"].(string); ok {
 		recipe.Title = title
 	}
 
 	if desc, ok := data["description"].(string); ok {
-		recipe.Description = desc
+		recipe.Blurb = desc
 	}
 
 	// Extract ingredients (can be array of strings or objects)
 	if ingredients, ok := data["recipeIngredient"].([]interface{}); ok {
 		for _, ing := range ingredients {
 			if str, ok := ing.(string); ok {
-				recipe.Ingredients = append(recipe.Ingredients, str)
+				ingredient, err := util.ParseIngredient(str, ingredientsDict)
+				if err != nil {
+					log.Printf("failed to parse ingredient: %v", err)
+					continue
+				}
+				recipe.Ingredients = append(recipe.Ingredients, ingredient)
 			}
 		}
 	}
@@ -163,45 +209,65 @@ func parseSchemaRecipe(data map[string]interface{}) *Recipe {
 	// Extract instructions (can be string, array, or HowToStep objects)
 	if instructions, ok := data["recipeInstructions"].([]interface{}); ok {
 		for _, inst := range instructions {
+			var methodStr string
+			var method dto.MethodItem
 			if str, ok := inst.(string); ok {
-				recipe.Instructions = append(recipe.Instructions, str)
+				methodStr = str
 			} else if obj, ok := inst.(map[string]interface{}); ok {
 				if text, ok := obj["text"].(string); ok {
-					recipe.Instructions = append(recipe.Instructions, text)
+					methodStr = text
 				}
+			}
+			if methodStr != "" {
+				_ = method.UnmarshalText([]byte(methodStr))
+				recipe.Method = append(recipe.Method, method)
 			}
 		}
 	} else if inst, ok := data["recipeInstructions"].(string); ok {
-		recipe.Instructions = append(recipe.Instructions, inst)
+		var method dto.MethodItem
+		_ = method.UnmarshalText([]byte(inst))
+		recipe.Method = append(recipe.Method, method)
 	}
 
 	// Extract times
 	if prepTime, ok := data["prepTime"].(string); ok {
-		recipe.PrepTime = prepTime
+		ptime, err := strconv.Atoi(prepTime)
+		if err == nil {
+			recipe.PrepTime = &ptime
+		}
 	}
 	if cookTime, ok := data["cookTime"].(string); ok {
-		recipe.CookTime = cookTime
+		ctime, err := strconv.Atoi(cookTime)
+		if err == nil {
+			recipe.CookingTime = ctime
+		}
 	}
-	if totalTime, ok := data["totalTime"].(string); ok {
-		recipe.TotalTime = totalTime
-	}
+	//if totalTime, ok := data["totalTime"].(string); ok {
+	//	recipe.TotalTime = totalTime
+	//}
 
 	// Extract servings
 	if yield, ok := data["recipeYield"].(string); ok {
-		recipe.Servings = yield
+		y, err := strconv.Atoi(yield)
+		if err == nil {
+			recipe.Serving = y
+		}
 	} else if yieldArray, ok := data["recipeYield"].([]interface{}); ok && len(yieldArray) > 0 {
 		if yieldStr, ok := yieldArray[0].(string); ok {
-			recipe.Servings = yieldStr
+			y, err := strconv.Atoi(yieldStr)
+			if err == nil {
+				recipe.Serving = y
+			}
 		}
 	}
 
-	// Extract category/cuisine
-	if category, ok := data["recipeCategory"].(string); ok {
-		recipe.Category = category
-	}
-	if cuisine, ok := data["recipeCuisine"].(string); ok {
-		recipe.Cuisine = cuisine
-	}
+	//// Extract category/cuisine
+	//if category, ok := data["recipeCategory"].(string); ok {
+	//	recipe.Category = category
+	//}
+	//if cuisine, ok := data["recipeCuisine"].(string); ok {
+	//	recipe.Cuisine = cuisine
+	//}
 
 	// Extract author
 	if author, ok := data["author"].(map[string]interface{}); ok {
@@ -212,18 +278,18 @@ func parseSchemaRecipe(data map[string]interface{}) *Recipe {
 		recipe.Author = authorStr
 	}
 
-	// Extract image
-	if image, ok := data["image"].(string); ok {
-		recipe.ImageURL = image
-	} else if imageObj, ok := data["image"].(map[string]interface{}); ok {
-		if url, ok := imageObj["url"].(string); ok {
-			recipe.ImageURL = url
-		}
-	} else if imageArray, ok := data["image"].([]interface{}); ok && len(imageArray) > 0 {
-		if imageStr, ok := imageArray[0].(string); ok {
-			recipe.ImageURL = imageStr
-		}
-	}
+	//// Extract image
+	//if image, ok := data["image"].(string); ok {
+	//	recipe.ImageURL = image
+	//} else if imageObj, ok := data["image"].(map[string]interface{}); ok {
+	//	if url, ok := imageObj["url"].(string); ok {
+	//		recipe.ImageURL = url
+	//	}
+	//} else if imageArray, ok := data["image"].([]interface{}); ok && len(imageArray) > 0 {
+	//	if imageStr, ok := imageArray[0].(string); ok {
+	//		recipe.ImageURL = imageStr
+	//	}
+	//}
 
 	// Validate we got at least title and ingredients
 	if recipe.Title == "" || len(recipe.Ingredients) == 0 {
@@ -234,8 +300,8 @@ func parseSchemaRecipe(data map[string]interface{}) *Recipe {
 }
 
 // extractWithPattern uses domain-specific CSS selectors
-func (s *recipeService) extractWithPattern(doc *goquery.Document, pattern DomainPattern) (*Recipe, error) {
-	recipe := &Recipe{}
+func (s *recipeService) extractWithPattern(doc *goquery.Document, pattern DomainPattern) (*entity.Recipe, error) {
+	recipe := &entity.Recipe{}
 
 	// Extract title
 	if pattern.Title != "" {
@@ -244,7 +310,7 @@ func (s *recipeService) extractWithPattern(doc *goquery.Document, pattern Domain
 
 	// Extract description
 	if pattern.Description != "" {
-		recipe.Description = strings.TrimSpace(doc.Find(pattern.Description).First().Text())
+		recipe.Blurb = strings.TrimSpace(doc.Find(pattern.Description).First().Text())
 	}
 
 	// Extract ingredients
@@ -252,7 +318,12 @@ func (s *recipeService) extractWithPattern(doc *goquery.Document, pattern Domain
 		doc.Find(pattern.Ingredients).Each(func(i int, s *goquery.Selection) {
 			ingredient := strings.TrimSpace(s.Text())
 			if ingredient != "" {
-				recipe.Ingredients = append(recipe.Ingredients, ingredient)
+				ing, err := util.ParseIngredient(ingredient, ingredientsDict)
+				if err != nil {
+					log.Printf("failed to parse ingredient: %v", err)
+					return
+				}
+				recipe.Ingredients = append(recipe.Ingredients, ing)
 			}
 		})
 	}
@@ -262,29 +333,46 @@ func (s *recipeService) extractWithPattern(doc *goquery.Document, pattern Domain
 		doc.Find(pattern.Instructions).Each(func(i int, s *goquery.Selection) {
 			instruction := strings.TrimSpace(s.Text())
 			if instruction != "" {
-				recipe.Instructions = append(recipe.Instructions, instruction)
+				methodItm := dto.MethodItem{Content: instruction}
+				recipe.Method = append(recipe.Method, methodItm)
 			}
 		})
 	}
 
 	// Extract metadata
 	if pattern.PrepTime != "" {
-		recipe.PrepTime = strings.TrimSpace(doc.Find(pattern.PrepTime).First().Text())
-	}
-	if pattern.CookTime != "" {
-		recipe.CookTime = strings.TrimSpace(doc.Find(pattern.CookTime).First().Text())
-	}
-	if pattern.TotalTime != "" {
-		recipe.TotalTime = strings.TrimSpace(doc.Find(pattern.TotalTime).First().Text())
-	}
-	if pattern.Servings != "" {
-		recipe.Servings = strings.TrimSpace(doc.Find(pattern.Servings).First().Text())
-	}
-	if pattern.ImageURL != "" {
-		if img, exists := doc.Find(pattern.ImageURL).First().Attr("src"); exists {
-			recipe.ImageURL = img
+		prepStr := strings.TrimSpace(doc.Find(pattern.PrepTime).First().Text())
+		if prepStr != "" {
+			ptime, err := strconv.Atoi(prepStr)
+			if err == nil {
+				recipe.PrepTime = &ptime
+			}
 		}
 	}
+	if pattern.CookTime != "" {
+		cookStr := strings.TrimSpace(doc.Find(pattern.CookTime).First().Text())
+		if cookStr != "" {
+			ctime, err := strconv.Atoi(cookStr)
+			if err == nil {
+				recipe.CookingTime = ctime
+			}
+		}
+	}
+
+	if pattern.Servings != "" {
+		servingStr := strings.TrimSpace(doc.Find(pattern.Servings).First().Text())
+		if servingStr != "" {
+			serving, err := strconv.Atoi(servingStr)
+			if err == nil {
+				recipe.Serving = serving
+			}
+		}
+	}
+	//if pattern.ImageURL != "" {
+	//	if img, exists := doc.Find(pattern.ImageURL).First().Attr("src"); exists {
+	//		recipe.ImageURL = img
+	//	}
+	//}
 
 	// Validate we got essential data
 	if recipe.Title == "" || len(recipe.Ingredients) == 0 {
@@ -305,7 +393,7 @@ func (s *recipeService) extractCleanedData(doc *goquery.Document) map[string]str
 
 	// Extract all text that might be ingredients (common patterns)
 	var ingredientText []string
-	doc.Find("ul li, .ingredient, [class*='ingredient'], [class*='Ingredient']").Each(func(i int, s *goquery.Selection) {
+	doc.Find("ul li, .ingredient, [class*='ingredient'], [class*='IngredientsItem']").Each(func(i int, s *goquery.Selection) {
 		text := strings.TrimSpace(s.Text())
 		if text != "" && len(text) < 200 { // Ingredients are usually short
 			ingredientText = append(ingredientText, text)
@@ -339,20 +427,37 @@ func (s *recipeService) extractCleanedData(doc *goquery.Document) map[string]str
 }
 
 // extractWithLLMCleaned uses LLM with cleaned/extracted data
-func (s *recipeService) extractWithLLMCleaned(cleanedData map[string]string) (*Recipe, error) {
+func (s *recipeService) extractWithLLMCleaned(cleanedData map[string]string) (*entity.Recipe, error) {
 	log.Printf("LLM (cleaned) called with data: %v", cleanedData)
 	panic("LLM cleaned extraction not implemented - feature flag: llm_cleaned_html")
 }
 
 // extractWithLLMFull uses LLM with full HTML
-func (s *recipeService) extractWithLLMFull(html string) (*Recipe, error) {
+func (s *recipeService) extractWithLLMFull(html string) (*entity.Recipe, error) {
 	log.Printf("LLM (full) called with HTML length: %d", len(html))
 	panic("LLM full extraction not implemented - feature flag: llm_full_html")
+}
+
+func (s *recipeService) SearchRecipes(ctx context.Context, searchTerm string) ([]dto.RecipeSearchResult, error) {
+	return s.recipesRepo.GetRecipesBySearchQuery(ctx, searchTerm)
+}
+
+func (s *recipeService) GetRecipeByID(ctx context.Context, id uuid.UUID) (entity.Recipe, error) {
+	return s.recipesRepo.GetByID(ctx, id)
 }
 
 // initializeDomainPatterns creates patterns for known recipe sites
 func initializeDomainPatterns() map[string]DomainPattern {
 	return map[string]DomainPattern{
+		"books.ottolenghi.co.uk": {
+			Domain:       "books.ottolenghi.co.uk",
+			Title:        ".print-recipe-heading",
+			Description:  ".accordion__content .jsAccordionContentInner p",
+			Ingredients:  ".recipe__aside ul li",
+			Instructions: ".recipe-list ol li",
+			Servings:     ".recipe-meta--yield",
+			ImageURL:     ".recipe__aside img.wp-post-image",
+		},
 		"allrecipes.com": {
 			Domain:       "allrecipes.com",
 			Title:        "h1.article-heading",
@@ -367,7 +472,7 @@ func initializeDomainPatterns() map[string]DomainPattern {
 		"foodnetwork.com": {
 			Domain:       "foodnetwork.com",
 			Title:        "h1.o-AssetTitle__a-Headline",
-			Ingredients:  "ul.o-Ingredients__m-List li.o-Ingredients__a-Ingredient",
+			Ingredients:  "ul.o-Ingredients__m-List li.o-Ingredients__a-IngredientsItem",
 			Instructions: "ol.o-Method__m-Step li.o-Method__m-Step",
 			TotalTime:    "span.o-RecipeInfo__a-Description",
 			Servings:     "span.o-RecipeInfo__a-Description",

@@ -14,24 +14,43 @@ func (u Unit) String() string {
 }
 
 var (
-	Grams       = Unit{value: "g"}
-	Millilitres = Unit{value: "mL"}
-	Teaspoons   = Unit{value: "tsp"}
-	Tablespoons = Unit{value: "tbsp"}
-	Pieces      = Unit{value: ""}
-	Pinch       = Unit{value: "a pinch"}
-	ToTaste     = Unit{value: "to taste"}
+	Gram       = Unit{value: "g"}
+	Millilitre = Unit{value: "mL"}
+	Teaspoon   = Unit{value: "tsp"}
+	Tablespoon = Unit{value: "tbsp"}
+	Piece      = Unit{value: ""}
+	Pinch      = Unit{value: "pinch"}
+	Bunch      = Unit{value: "bunch"}
+	Clove      = Unit{value: "clove"}
+	ToTaste    = Unit{value: "to taste"}
 )
 
 func NewUnit(kind string) Unit {
 	return map[string]Unit{
-		Grams.value:       Grams,
-		Millilitres.value: Millilitres,
-		Teaspoons.value:   Teaspoons,
-		Tablespoons.value: Tablespoons,
-		Pieces.value:      Pieces,
-		Pinch.value:       Pinch,
-		ToTaste.value:     ToTaste,
+		"g":           Gram,
+		"gram":        Gram,
+		"grams":       Gram,
+		"ml":          Millilitre,
+		"mL":          Millilitre,
+		"millilitre":  Millilitre,
+		"millilitres": Millilitre,
+		"tsp":         Teaspoon,
+		"teaspoon":    Teaspoon,
+		"teaspoons":   Teaspoon,
+		"tbsp":        Tablespoon,
+		"tablespoon":  Tablespoon,
+		"tablespoons": Tablespoon,
+		"pinch":       Pinch,
+		"a pinch":     Pinch,
+		"pinches":     Pinch,
+		"bunch":       Bunch,
+		"a bunch":     Bunch,
+		"bunches":     Bunch,
+		"to taste":    ToTaste,
+		"clove":       Clove,
+		"a clove":     Clove,
+		"cloves":      Clove,
+		"":            Piece,
 	}[kind]
 }
 

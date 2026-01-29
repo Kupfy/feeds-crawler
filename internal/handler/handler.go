@@ -11,16 +11,14 @@ import (
 type Handler interface {
 	StartCrawl(c *gin.Context)
 	GetCrawl(c *gin.Context)
+	ProcessRecipeFromPage(c *gin.Context)
+	SearchRecipes(c *gin.Context)
+	GetRecipeByID(c *gin.Context)
 }
 
 type handler struct {
 	crawlerService service.CrawlerService
 	recipeService  service.RecipeService
-}
-
-func (h *handler) GetCrawl(c *gin.Context) {
-	//TODO implement me
-	panic("implement me")
 }
 
 func NewHandler(
@@ -41,4 +39,32 @@ func (h *handler) StartCrawl(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusAccepted, gin.H{"job_id": jobID})
+}
+
+func (h *handler) GetCrawl(c *gin.Context) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (h *handler) ProcessRecipeFromPage(c *gin.Context) {
+	var req dto.RecipeExtractionRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.recipeService.ProcessRecipeByUrl(c.Request.Context(), req.Url); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{})
+}
+
+func (h *handler) SearchRecipes(c *gin.Context) {
+
+}
+
+func (h *handler) GetRecipeByID(c *gin.Context) {
+
 }

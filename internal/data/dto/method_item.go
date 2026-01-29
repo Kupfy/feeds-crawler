@@ -43,3 +43,11 @@ func (m MethodItem) Value() (driver.Value, error) {
 
 	return fmt.Sprintf("%s:%s", section, m.Content), nil
 }
+
+func (m MethodItem) String() string {
+	return m.Content
+}
+
+func (m MethodItem) UnmarshalText(text []byte) error {
+	return m.Scan(text)
+}

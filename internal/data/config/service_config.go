@@ -19,6 +19,9 @@ type ServiceConfig struct {
 	DbUser             string        `envconfig:"DB_USER" default:"postgres"`
 	DbPassword         string        `envconfig:"DB_PASSWORD" default:""`
 	DbName             string        `envconfig:"DB_NAME" default:"postgres"`
+	RedisHost          string        `envconfig:"REDIS_HOST" default:"redis"`
+	RedisPort          string        `envconfig:"REDIS_PORT" default:"6379"`
+	QueueTimeout       time.Duration `envconfig:"QUEUE_TIMEOUT_SECONDS" default:"30s"`
 	DefaultConcurrency int           `envconfig:"DEFAULT_CONCURRENCY" default:"8"`
 	DefaultMaxDepth    int           `envconfig:"DEFAULT_MAX_DEPTH" default:"5"`
 	DefaultRetries     int           `envconfig:"DEFAULT_RETRIES" default:"3"`

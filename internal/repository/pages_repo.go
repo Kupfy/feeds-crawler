@@ -13,6 +13,7 @@ import (
 type PagesRepo interface {
 	SavePage(ctx context.Context, page *entity.Page) error
 	IsVisited(ctx context.Context, url string) (bool, error)
+	GetPageByUrl(ctx context.Context, url string) (entity.Page, error)
 	MarkPageStatus(ctx context.Context, url string, status crawlstatus.CrawlStatus) error
 }
 
@@ -25,8 +26,9 @@ func NewPagesRepo(db *sqlx.DB) PagesRepo {
 }
 
 func (p pagesRepo) SavePage(ctx context.Context, page *entity.Page) error {
+	//startTime := time.Now()
 	query := `INSERT INTO pages (
-                   path, site_domain, url, parent_url, depth, html, text, images, status, meta, fetched_at
+                   path, site_domain, url, parent_url, depth, html, text, images, status, meta, inserted_at
 			  ) VALUES (
 				   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 			  ) ON CONFLICT (url) DO NOTHING;`
@@ -50,6 +52,7 @@ func (p pagesRepo) SavePage(ctx context.Context, page *entity.Page) error {
 	if rows == 0 {
 		log.Printf("No pages inserted for: %v", page.URL)
 	}
+	//log.Printf("Page %v inserted in %v", page.URL, time.Since(startTime))
 	return nil
 }
 
@@ -67,6 +70,13 @@ func (p pagesRepo) IsVisited(ctx context.Context, url string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func (p pagesRepo) GetPageByUrl(ctx context.Context, url string) (entity.Page, error) {
+	var page entity.Page
+	query := "SELECT * FROM pages WHERE url = $1;"
+	err := p.db.GetContext(ctx, &page, query, url)
+	return page, err
 }
 
 func (p pagesRepo) MarkPageStatus(ctx context.Context, url string, status crawlstatus.CrawlStatus) error {

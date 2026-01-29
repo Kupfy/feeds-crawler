@@ -8,30 +8,32 @@ import (
 	"github.com/Kupfy/feeds-crawler/internal/data/enum/unit"
 )
 
-type Ingredient struct {
-	Name      string
-	Unit      unit.Unit
-	Component *string
+type IngredientsItem struct {
+	Name        string
+	Quantity    float64
+	Unit        unit.Unit
+	Component   *string
+	Instruction *string
 }
 
-func (i *Ingredient) Scan(val interface{}) error {
+func (i *IngredientsItem) Scan(val interface{}) error {
 	switch v := val.(type) {
 	case []byte:
-		*i = stringToIngredient(string(v))
+		*i = dbStringToIngredient(string(v))
 		return nil
 	case string:
-		*i = stringToIngredient(v)
+		*i = dbStringToIngredient(v)
 		return nil
 	default:
 		return fmt.Errorf("unsupported type: %v", v)
 	}
 }
 
-func stringToIngredient(str string) Ingredient {
+func dbStringToIngredient(str string) IngredientsItem {
 	split := strings.Split(str, ":")
 	var u unit.Unit
 	_ = u.UnmarshalText([]byte(split[2]))
-	ingredient := Ingredient{
+	ingredient := IngredientsItem{
 		Name: split[1],
 		Unit: u,
 	}
@@ -41,11 +43,16 @@ func stringToIngredient(str string) Ingredient {
 	return ingredient
 }
 
-func (i Ingredient) Value() (driver.Value, error) {
+func (i IngredientsItem) Value() (driver.Value, error) {
 	component := "Dish"
 	if i.Component != nil {
 		component = *i.Component
 	}
 
 	return fmt.Sprintf("%s:%s:%s", component, i.Name, i.Unit), nil
+}
+
+func (i IngredientsItem) String() string {
+
+	return fmt.Sprintf("%s %s of %s", i.Quantity, i.Unit, i.Name)
 }

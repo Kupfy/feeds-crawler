@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS crawls (
 CREATE TABLE IF NOT EXISTS links (
     from_url TEXT,
     to_url TEXT,
-    crwl_id UUID,
+    crawl_id UUID,
     PRIMARY KEY (from_url, to_url)
 );
 
@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS recipes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT,
     author TEXT,
+    publication TEXT,
     blurb TEXT,
     ingredients TEXT[],
     method TEXT[],
