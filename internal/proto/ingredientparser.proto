@@ -1,0 +1,39 @@
+syntax = "proto3";
+option go_package = "github.com/Kupfy/feeds-crawler/ingredientparser";
+
+//package ingredientsparser;
+
+// The service definition
+service IngredientParser {
+  rpc Parse(ParseRequest) returns (ParseResponse) {}
+}
+
+// Request message
+message ParseRequest {
+  string raw = 1;
+}
+
+// Response message
+message ParseResponse {
+  repeated ConfidenceText name = 1;
+  optional ConfidenceText size = 2;
+  repeated Amount amount = 3;
+  optional ConfidenceText preparation = 4;
+  optional ConfidenceText comment = 5;
+  optional ConfidenceText purpose = 6;
+}
+
+// Helper messages
+message Amount {
+  string quantity = 1;
+  string unit = 2;
+  string text = 3;
+  float confidence = 4;
+  bool approximate = 5;
+  bool singular = 6;
+}
+
+message ConfidenceText {
+  string text = 1;
+  float confidence = 2;
+}

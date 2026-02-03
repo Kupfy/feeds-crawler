@@ -29,9 +29,10 @@ import (
 
 type crawlJob struct {
 	entity.Crawl
-	Sitemap map[string][]string
-	Visited *sync.Map
-	Mu      sync.Mutex
+	SeedPath string
+	Sitemap  map[string][]string
+	Visited  *sync.Map
+	Mu       sync.Mutex
 }
 
 type CrawlerService interface {
@@ -157,6 +158,7 @@ func (s *crawlerService) runJob(ctx context.Context, job *crawlJob, req dto.Star
 
 	parsedSeed, _ := url.Parse(job.SeedURL)
 	host := parsedSeed.Hostname()
+	job.SeedPath = parsedSeed.Path
 
 	// Perform login FIRST with the shared jar
 	if err := s.performLogin(ctx, jar, host, job, req.Login); err != nil {
@@ -424,6 +426,10 @@ func (j *crawlJob) shouldFollowLink(link string, excludedSegments []string) bool
 		return false
 	}
 
+	if !isWithinSeedPath(parsedURL.Path, j.SeedPath) {
+		return false
+	}
+
 	// Check for excluded path segments
 	if len(excludedSegments) > 0 {
 		linkLower := strings.ToLower(link)
@@ -528,4 +534,19 @@ func (s *crawlerService) postLogin(ctx context.Context, targetURL string, formDa
 	}
 
 	return nil
+}
+
+// isWithinSeedPath checks if a URL path is within the seed path scope
+func isWithinSeedPath(linkPath, seedPath string) bool {
+	// Clean paths
+	linkPath = strings.TrimSuffix(linkPath, "/")
+	seedPath = strings.TrimSuffix(seedPath, "/")
+
+	// If seed is root, allow everything
+	if seedPath == "" || seedPath == "/" {
+		return true
+	}
+
+	// Check if link path starts with seed path
+	return strings.HasPrefix(linkPath, seedPath)
 }

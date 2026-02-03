@@ -52,9 +52,21 @@ CREATE TABLE IF NOT EXISTS recipes (
     author TEXT,
     publication TEXT,
     blurb TEXT,
-    ingredients TEXT[],
-    method TEXT[],
+    ingredients JSONB,
+    method JSONB,
     serving INTEGER,
     cooking_time INTEGER,
     prep_time INTEGER
+);
+
+CREATE INDEX idx_recipes_ingredients_gin_path
+    ON recipes
+    USING GIN (ingredients jsonb_path_ops);
+
+CREATE TABLE IF NOT EXISTS ingredients (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    canonical_name TEXT,
+    display_name TEXT,
+    display_name_plural TEXT,
+    aliases TEXT[]
 );

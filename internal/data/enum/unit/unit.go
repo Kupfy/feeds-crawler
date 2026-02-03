@@ -3,10 +3,12 @@ package unit
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"strings"
 )
 
 type Unit struct {
-	value string
+	value     string
+	qualifier string
 }
 
 func (u Unit) String() string {
@@ -21,37 +23,44 @@ var (
 	Piece      = Unit{value: ""}
 	Pinch      = Unit{value: "pinch"}
 	Bunch      = Unit{value: "bunch"}
-	Clove      = Unit{value: "clove"}
 	ToTaste    = Unit{value: "to taste"}
 )
 
 func NewUnit(kind string) Unit {
-	return map[string]Unit{
-		"g":           Gram,
-		"gram":        Gram,
-		"grams":       Gram,
-		"ml":          Millilitre,
-		"mL":          Millilitre,
-		"millilitre":  Millilitre,
-		"millilitres": Millilitre,
-		"tsp":         Teaspoon,
-		"teaspoon":    Teaspoon,
-		"teaspoons":   Teaspoon,
-		"tbsp":        Tablespoon,
-		"tablespoon":  Tablespoon,
-		"tablespoons": Tablespoon,
-		"pinch":       Pinch,
-		"a pinch":     Pinch,
-		"pinches":     Pinch,
-		"bunch":       Bunch,
-		"a bunch":     Bunch,
-		"bunches":     Bunch,
-		"to taste":    ToTaste,
-		"clove":       Clove,
-		"a clove":     Clove,
-		"cloves":      Clove,
-		"":            Piece,
-	}[kind]
+	tokens := tokenize(kind)
+
+	var u Unit
+	for i, token := range tokens {
+		u = map[string]Unit{
+			"g":           Gram,
+			"gram":        Gram,
+			"grams":       Gram,
+			"ml":          Millilitre,
+			"mL":          Millilitre,
+			"millilitre":  Millilitre,
+			"millilitres": Millilitre,
+			"tsp":         Teaspoon,
+			"teaspoon":    Teaspoon,
+			"teaspoons":   Teaspoon,
+			"tbsp":        Tablespoon,
+			"tablespoon":  Tablespoon,
+			"tablespoons": Tablespoon,
+			"pinch":       Pinch,
+			"a pinch":     Pinch,
+			"pinches":     Pinch,
+			"bunch":       Bunch,
+			"a bunch":     Bunch,
+			"bunches":     Bunch,
+			"to taste":    ToTaste,
+			"":            Piece,
+		}[token]
+
+		if u.value != "" {
+			qualifier := append(tokens[:i], tokens[i+1:]...)
+			u.qualifier = strings.Join(qualifier, " ")
+		}
+	}
+	return u
 }
 
 func (u Unit) MarshalJSON() ([]byte, error) {
@@ -88,4 +97,11 @@ func (u Unit) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return i.value, nil
+}
+
+func tokenize(s string) []string {
+	s = strings.ReplaceAll(s, ",", " , ")
+	s = strings.ReplaceAll(s, "(", " ( ")
+	s = strings.ReplaceAll(s, ")", " ) ")
+	return strings.Fields(s)
 }

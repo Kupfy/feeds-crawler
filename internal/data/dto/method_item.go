@@ -2,9 +2,25 @@ package dto
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
+
+type Method []MethodItem
+
+func (m *Method) Scan(val interface{}) error {
+	var err error
+	switch v := val.(type) {
+	case []byte:
+		err = json.Unmarshal(v, &m)
+	case string:
+		err = json.Unmarshal([]byte(v), &m)
+	default:
+		err = fmt.Errorf("unsupported type: %v", v)
+	}
+	return err
+}
 
 type MethodItem struct {
 	Content string
@@ -12,16 +28,16 @@ type MethodItem struct {
 }
 
 func (m *MethodItem) Scan(val interface{}) error {
+	var err error
 	switch v := val.(type) {
 	case []byte:
-		*m = stringToMethod(string(v))
-		return nil
+		err = json.Unmarshal(v, &m)
 	case string:
-		*m = stringToMethod(v)
-		return nil
+		err = json.Unmarshal([]byte(v), &m)
 	default:
-		return fmt.Errorf("unsupported type: %v", v)
+		err = fmt.Errorf("unsupported type: %v", v)
 	}
+	return err
 }
 
 func stringToMethod(str string) MethodItem {
@@ -36,12 +52,7 @@ func stringToMethod(str string) MethodItem {
 }
 
 func (m MethodItem) Value() (driver.Value, error) {
-	section := "Method"
-	if m.Section != nil {
-		section = *m.Section
-	}
-
-	return fmt.Sprintf("%s:%s", section, m.Content), nil
+	return json.Marshal(m)
 }
 
 func (m MethodItem) String() string {

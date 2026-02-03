@@ -29,7 +29,7 @@ func normalize(s string) string {
 	return s
 }
 
-func tokenize(s string) []string {
+func Tokenize(s string) []string {
 	s = strings.ReplaceAll(s, ",", " , ")
 	s = strings.ReplaceAll(s, "(", " ( ")
 	s = strings.ReplaceAll(s, ")", " ) ")
@@ -56,11 +56,15 @@ func extractUnit(tokens []string, start int) (unit.Unit, int) {
 	return unit.NewUnit(tokens[start+1]), start + 1
 }
 
-func extractInstruction(s string) *string {
-	if idx := strings.Index(s, ","); idx != -1 {
-		instr := strings.TrimSpace(s[idx+1:])
-		if instr != "" {
-			return &instr
+func extractInstruction(s *string) *string {
+	if s != nil {
+		sVal := *s
+		if idx := strings.Index(sVal, ","); idx != -1 {
+			instr := strings.TrimSpace(sVal[idx+1:])
+			if instr != "" {
+				s = ToPtr(strings.Trim(sVal, instr))
+				return &instr
+			}
 		}
 	}
 	return nil
@@ -77,9 +81,9 @@ func extractComponent(s string) *string {
 	return nil
 }
 
-func ParseIngredient(raw string, ingredientsDict map[string]entity.Ingredient) (dto.IngredientsItem, error) {
+func ParseIngredient(raw string, ingredientsDict map[string]*entity.Ingredient) (dto.IngredientsItem, error) {
 	s := normalize(raw)
-	tokens := tokenize(s)
+	tokens := Tokenize(s)
 
 	qty, qtyIdx, ok := extractQuantity(tokens)
 	if !ok {
@@ -88,8 +92,8 @@ func ParseIngredient(raw string, ingredientsDict map[string]entity.Ingredient) (
 
 	u, unitIdx := extractUnit(tokens, qtyIdx)
 
-	instr := extractInstruction(s)
-	comp := extractComponent(s)
+	instr := extractInstruction(&s)
+	tokens = Tokenize(s)
 
 	nameTokens := tokens
 	if unitIdx != -1 {
@@ -99,14 +103,17 @@ func ParseIngredient(raw string, ingredientsDict map[string]entity.Ingredient) (
 	name := nameTokens[len(nameTokens)-1]
 	nameCandidate := strings.Join(nameTokens, " ")
 	if ingredient, ok := ingredientsDict[nameCandidate]; ok {
-		name = ingredient.Name
+		if qty > 1 {
+			name = ingredient.DisplayNamePlural
+		} else {
+			name = ingredient.DisplayName
+		}
 	}
 
 	return dto.IngredientsItem{
 		Name:        name,
 		Quantity:    qty,
 		Unit:        u,
-		Component:   comp,
 		Instruction: instr,
 	}, nil
 }

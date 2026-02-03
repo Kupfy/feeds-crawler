@@ -1,0 +1,3 @@
+[submodule "services/ingredients-nlp-server"]
+	path = services/ingredients-nlp-server
+	url = git@github.com:Kupfy/ingredients-nlp-server.git

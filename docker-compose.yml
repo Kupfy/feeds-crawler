@@ -12,7 +12,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Optional: Add init scripts
-      - ./deploy/db/migration/init.sql:/docker-entrypoint-initdb.d/db.sql
+      - ./deploy/db/migration/01_init.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ./deploy/db/migration/02_ingredients_insert.sql:/docker-entrypoint-initdb.d/02_ingredients_insert.sql
     networks:
       - app-network
     healthcheck:
@@ -72,6 +73,17 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+  ingredient-parser:
+    build: ./services/ingredients-nlp-server
+    ports:
+      - "50051:50051"
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD", "grpc_health_probe", "-addr=:50051" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 networks:
   app-network:

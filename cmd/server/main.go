@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/Kupfy/feeds-crawler/internal/clients"
 	"github.com/Kupfy/feeds-crawler/internal/data/config"
 	"github.com/Kupfy/feeds-crawler/internal/handler"
 	"github.com/Kupfy/feeds-crawler/internal/messaging"
@@ -64,6 +65,17 @@ func main() {
 		}
 	}(queue)
 
+	client, err := clients.NewIngredientParserClient(cfg.IngredientServiceAddr)
+	if err != nil {
+		return
+	}
+	defer func(client *clients.IngredientParserClient) {
+		err := client.Close()
+		if err != nil {
+
+		}
+	}(client)
+
 	crawlRepo := repository.NewCrawlsRepo(db)
 	sitesRepo := repository.NewSiteRepo(db)
 	pagesRepo := repository.NewPagesRepo(db)
@@ -72,15 +84,17 @@ func main() {
 	ingredientsRepo := repository.NewIngredientsRepo(db)
 
 	crawlerService := service.NewCrawlerService(cfg, crawlRepo, sitesRepo, pagesRepo, linksRepo, queue)
-	recipeService := service.NewRecipeService(cfg, recipesRepo, pagesRepo, queue)
-	ingredientsService := service.NewIngredientsService(ingredientsRepo)
+	ingredientsService := service.NewIngredientsService(ingredientsRepo, client)
+	recipeService := service.NewRecipeService(cfg, recipesRepo, pagesRepo, ingredientsService, queue)
 
 	publicHandler := handler.NewHandler(crawlerService, recipeService)
 	publicRouter := router.NewRouter(engine, middleware.NewAuthMiddleware(cfg.JwtSecret), publicHandler)
 
-	if err = ingredientsService.LoadIngredients(context.Background()); err == nil {
-		log.Fatal("Failed to load ingredients")
-	}
+	//if err = ingredientsService.LoadIngredients(context.Background()); err != nil {
+	//	log.Fatal("Failed to load ingredients")
+	//}
+	//
+	//
 
 	// Setup router
 	publicRouter.SetupRoutes()

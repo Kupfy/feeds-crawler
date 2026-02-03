@@ -23,7 +23,11 @@ func NewIngredientsRepo(db *sqlx.DB) IngredientsRepo {
 
 func (r ingredientsRepo) SaveIngredient(ctx context.Context, ingredient entity.Ingredient) (entity.Ingredient, error) {
 	var insertedIngredient entity.Ingredient
-	query := `INSERT INTO ingredients (name, aliases) VALUES (:name, :aliases) RETURNING *;`
+	query := `INSERT INTO ingredients (
+                  canonical_name, display_name, display_name_plural, aliases
+			  ) VALUES (
+			      :name, :display_name, :display_name_plural, :aliases
+			  ) RETURNING *;`
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
 	if err != nil {
 		log.Printf("Failed to prepare statement: %v", err)

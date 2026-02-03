@@ -10,23 +10,24 @@ import (
 )
 
 type ServiceConfig struct {
-	ServerHost         string        `envconfig:"HOST" default:"0.0.0.0"`
-	ServerPort         string        `envconfig:"SERVER_PORT" default:"8080"`
-	ENV                string        `envconfig:"ENV" default:"local"`
-	JwtSecret          string        `envconfig:"JWT_SECRET"`
-	DbHost             string        `envconfig:"DB_HOST" default:"postgres"`
-	DBPort             string        `envconfig:"DB_PORT" default:"5432"`
-	DbUser             string        `envconfig:"DB_USER" default:"postgres"`
-	DbPassword         string        `envconfig:"DB_PASSWORD" default:""`
-	DbName             string        `envconfig:"DB_NAME" default:"postgres"`
-	RedisHost          string        `envconfig:"REDIS_HOST" default:"redis"`
-	RedisPort          string        `envconfig:"REDIS_PORT" default:"6379"`
-	QueueTimeout       time.Duration `envconfig:"QUEUE_TIMEOUT_SECONDS" default:"30s"`
-	DefaultConcurrency int           `envconfig:"DEFAULT_CONCURRENCY" default:"8"`
-	DefaultMaxDepth    int           `envconfig:"DEFAULT_MAX_DEPTH" default:"5"`
-	DefaultRetries     int           `envconfig:"DEFAULT_RETRIES" default:"3"`
-	DefaultBackoff     time.Duration `envconfig:"DEFAULT_BACKOFF" default:"1000000s"`
-	FeatureFlags       FeatureFlags  `envconfig:"FEATURE_FLAGS"`
+	ServerHost            string        `envconfig:"HOST" default:"0.0.0.0"`
+	ServerPort            string        `envconfig:"SERVER_PORT" default:"8080"`
+	ENV                   string        `envconfig:"ENV" default:"local"`
+	JwtSecret             string        `envconfig:"JWT_SECRET"`
+	DbHost                string        `envconfig:"DB_HOST" default:"postgres"`
+	DBPort                string        `envconfig:"DB_PORT" default:"5432"`
+	DbUser                string        `envconfig:"DB_USER" default:"postgres"`
+	DbPassword            string        `envconfig:"DB_PASSWORD" default:""`
+	DbName                string        `envconfig:"DB_NAME" default:"postgres"`
+	RedisHost             string        `envconfig:"REDIS_HOST" default:"redis"`
+	RedisPort             string        `envconfig:"REDIS_PORT" default:"6379"`
+	IngredientServiceAddr string        `envconfig:"INGREDIENT_SERVICE_ADDR" default:"ingredient-parser:50051"`
+	QueueTimeout          time.Duration `envconfig:"QUEUE_TIMEOUT_SECONDS" default:"30s"`
+	DefaultConcurrency    int           `envconfig:"DEFAULT_CONCURRENCY" default:"8"`
+	DefaultMaxDepth       int           `envconfig:"DEFAULT_MAX_DEPTH" default:"5"`
+	DefaultRetries        int           `envconfig:"DEFAULT_RETRIES" default:"3"`
+	DefaultBackoff        time.Duration `envconfig:"DEFAULT_BACKOFF" default:"1000000s"`
+	FeatureFlags          FeatureFlags  `envconfig:"FEATURE_FLAGS"`
 }
 
 func NewServiceConfig(serviceConf *ServiceConfig) ServiceConfig {

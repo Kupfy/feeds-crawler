@@ -15,7 +15,6 @@ import (
 	"github.com/Kupfy/feeds-crawler/internal/data/entity"
 	"github.com/Kupfy/feeds-crawler/internal/messaging"
 	"github.com/Kupfy/feeds-crawler/internal/repository"
-	"github.com/Kupfy/feeds-crawler/internal/util"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/google/uuid"
 )
@@ -40,23 +39,26 @@ type RecipeService interface {
 }
 
 type recipeService struct {
-	patterns    map[string]DomainPattern
-	config      config.ServiceConfig
-	recipesRepo repository.RecipesRepo
-	pagesRepo   repository.PagesRepo
-	queue       messaging.RedisQueue
+	patterns           map[string]DomainPattern
+	config             config.ServiceConfig
+	recipesRepo        repository.RecipesRepo
+	pagesRepo          repository.PagesRepo
+	ingredientsService IngredientsService
+	queue              messaging.RedisQueue
 }
 
 func NewRecipeService(
 	config config.ServiceConfig, recipesRepo repository.RecipesRepo,
-	pagesRepo repository.PagesRepo, queue messaging.RedisQueue,
+	pagesRepo repository.PagesRepo, ingredientsService IngredientsService,
+	queue messaging.RedisQueue,
 ) RecipeService {
 	return &recipeService{
-		patterns:    initializeDomainPatterns(),
-		config:      config,
-		recipesRepo: recipesRepo,
-		pagesRepo:   pagesRepo,
-		queue:       queue,
+		patterns:           initializeDomainPatterns(),
+		config:             config,
+		recipesRepo:        recipesRepo,
+		pagesRepo:          pagesRepo,
+		ingredientsService: ingredientsService,
+		queue:              queue,
 	}
 }
 
@@ -81,7 +83,7 @@ func (s *recipeService) ProcessRecipeByUrl(ctx context.Context, url string) erro
 		return err
 	}
 
-	_, err = s.extractRecipe(nil, page.HTML, page.URL)
+	_, err = s.extractRecipe(ctx, page.HTML, page.URL)
 	if err != nil {
 		log.Printf("Failed to extract recipe: %v", err)
 		return err
@@ -101,14 +103,14 @@ func (s *recipeService) extractRecipe(ctx context.Context, html string, pageURL 
 	var recipe *entity.Recipe
 
 	// Step 1: Try schema.org structured data (free, fast)
-	if recipe, err = s.extractFromSchema(doc); err == nil && recipe != nil {
+	if recipe, err = s.extractFromSchema(ctx, doc); err == nil && recipe != nil {
 		log.Printf("✓ Extracted recipe from schema.org: %s", recipe.Title)
 		return recipe, nil
 	}
 
 	// Step 2: Try domain-specific CSS selectors (free, fast)
 	if pattern, exists := s.patterns[domain]; exists {
-		if recipe, err := s.extractWithPattern(doc, pattern); err == nil && recipe != nil {
+		if recipe, err := s.extractWithPattern(ctx, doc, pattern); err == nil && recipe != nil {
 			log.Printf("✓ Extracted recipe with pattern for %s: %s", domain, recipe.Title)
 			return recipe, nil
 		}
@@ -137,7 +139,7 @@ func (s *recipeService) extractRecipe(ctx context.Context, html string, pageURL 
 }
 
 // extractFromSchema extracts recipe from JSON-LD schema.org markup
-func (s *recipeService) extractFromSchema(doc *goquery.Document) (*entity.Recipe, error) {
+func (s *recipeService) extractFromSchema(ctx context.Context, doc *goquery.Document) (*entity.Recipe, error) {
 	var recipe *entity.Recipe
 
 	doc.Find("script[type='application/ld+json']").Each(func(i int, script *goquery.Selection) {
@@ -150,7 +152,7 @@ func (s *recipeService) extractFromSchema(doc *goquery.Document) (*entity.Recipe
 		// Try to parse as single object
 		var data map[string]interface{}
 		if err := json.Unmarshal([]byte(jsonText), &data); err == nil {
-			if r := parseSchemaRecipe(data); r != nil {
+			if r := s.parseSchemaRecipe(ctx, data); r != nil {
 				recipe = r
 				return
 			}
@@ -160,7 +162,7 @@ func (s *recipeService) extractFromSchema(doc *goquery.Document) (*entity.Recipe
 		var dataArray []map[string]interface{}
 		if err := json.Unmarshal([]byte(jsonText), &dataArray); err == nil {
 			for _, item := range dataArray {
-				if r := parseSchemaRecipe(item); r != nil {
+				if r := s.parseSchemaRecipe(ctx, item); r != nil {
 					recipe = r
 					return
 				}
@@ -176,7 +178,7 @@ func (s *recipeService) extractFromSchema(doc *goquery.Document) (*entity.Recipe
 }
 
 // parseSchemaRecipe parses a schema.org Recipe object
-func parseSchemaRecipe(data map[string]interface{}) *entity.Recipe {
+func (s *recipeService) parseSchemaRecipe(ctx context.Context, data map[string]interface{}) *entity.Recipe {
 	schemaType, ok := data["@type"].(string)
 	if !ok || schemaType != "Recipe" {
 		return nil
@@ -196,7 +198,7 @@ func parseSchemaRecipe(data map[string]interface{}) *entity.Recipe {
 	if ingredients, ok := data["recipeIngredient"].([]interface{}); ok {
 		for _, ing := range ingredients {
 			if str, ok := ing.(string); ok {
-				ingredient, err := util.ParseIngredient(str, ingredientsDict)
+				ingredient, err := s.ingredientsService.ParseIngredientLine(context.Background(), str)
 				if err != nil {
 					log.Printf("failed to parse ingredient: %v", err)
 					continue
@@ -300,7 +302,7 @@ func parseSchemaRecipe(data map[string]interface{}) *entity.Recipe {
 }
 
 // extractWithPattern uses domain-specific CSS selectors
-func (s *recipeService) extractWithPattern(doc *goquery.Document, pattern DomainPattern) (*entity.Recipe, error) {
+func (s *recipeService) extractWithPattern(ctx context.Context, doc *goquery.Document, pattern DomainPattern) (*entity.Recipe, error) {
 	recipe := &entity.Recipe{}
 
 	// Extract title
@@ -315,10 +317,10 @@ func (s *recipeService) extractWithPattern(doc *goquery.Document, pattern Domain
 
 	// Extract ingredients
 	if pattern.Ingredients != "" {
-		doc.Find(pattern.Ingredients).Each(func(i int, s *goquery.Selection) {
-			ingredient := strings.TrimSpace(s.Text())
+		doc.Find(pattern.Ingredients).Each(func(i int, gs *goquery.Selection) {
+			ingredient := strings.TrimSpace(gs.Text())
 			if ingredient != "" {
-				ing, err := util.ParseIngredient(ingredient, ingredientsDict)
+				ing, err := s.ingredientsService.ParseIngredientLine(ctx, ingredient)
 				if err != nil {
 					log.Printf("failed to parse ingredient: %v", err)
 					return
