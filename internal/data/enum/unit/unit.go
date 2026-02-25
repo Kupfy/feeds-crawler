@@ -9,6 +9,7 @@ import (
 type Unit struct {
 	value     string
 	qualifier string
+	rank      int
 }
 
 func (u Unit) String() string {
@@ -16,14 +17,16 @@ func (u Unit) String() string {
 }
 
 var (
-	Gram       = Unit{value: "g"}
-	Millilitre = Unit{value: "mL"}
-	Teaspoon   = Unit{value: "tsp"}
-	Tablespoon = Unit{value: "tbsp"}
-	Piece      = Unit{value: ""}
-	Pinch      = Unit{value: "pinch"}
-	Bunch      = Unit{value: "bunch"}
-	ToTaste    = Unit{value: "to taste"}
+	Gram       = Unit{value: "g", rank: 1}
+	Millilitre = Unit{value: "mL", rank: 2}
+	Teaspoon   = Unit{value: "tsp", rank: 3}
+	Tablespoon = Unit{value: "tbsp", rank: 4}
+	Cups       = Unit{value: "cup", rank: 5}
+	Cloves     = Unit{value: "clove", rank: 6}
+	Pinch      = Unit{value: "pinch", rank: 7}
+	Bunch      = Unit{value: "bunch", rank: 8}
+	ToTaste    = Unit{value: "to taste", rank: 9}
+	Piece      = Unit{value: "", rank: 10}
 )
 
 func NewUnit(kind string) Unit {
@@ -45,6 +48,11 @@ func NewUnit(kind string) Unit {
 			"tbsp":        Tablespoon,
 			"tablespoon":  Tablespoon,
 			"tablespoons": Tablespoon,
+			"cup":         Cups,
+			"cups":        Cups,
+			"clove":       Cloves,
+			"cloves":      Cloves,
+			"a clove":     Cloves,
 			"pinch":       Pinch,
 			"a pinch":     Pinch,
 			"pinches":     Pinch,
@@ -97,6 +105,10 @@ func (u Unit) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return i.value, nil
+}
+
+func (u Unit) Rank() int {
+	return u.rank
 }
 
 func tokenize(s string) []string {

@@ -11,7 +11,7 @@ import (
 )
 
 type RecipesRepo interface {
-	SaveRecipe(ctx context.Context, recipe entity.Recipe) error
+	SaveRecipe(recipe entity.Recipe, ctx context.Context) (*entity.Recipe, error)
 	GetRecipesBySearchQuery(ctx context.Context, search string) ([]dto.RecipeSearchResult, error)
 	GetByID(ctx context.Context, id uuid.UUID) (entity.Recipe, error)
 }
@@ -24,10 +24,10 @@ func NewRecipesRepo(db *sqlx.DB) RecipesRepo {
 	return &recipesRepo{db: db}
 }
 
-func (r recipesRepo) SaveRecipe(ctx context.Context, recipe entity.Recipe) error {
+func (r recipesRepo) SaveRecipe(recipe entity.Recipe, ctx context.Context) (*entity.Recipe, error) {
+	var inserted entity.Recipe
 	query := `
 		INSERT INTO recipes (
-		    id,
 			title,
 			author,
 			publication,
@@ -38,16 +38,18 @@ func (r recipesRepo) SaveRecipe(ctx context.Context, recipe entity.Recipe) error
 			cooking_time,
 			prep_time
 		) VALUES (
-		    :id, :title, :author, :publication, :blurb, :ingredients, :method, 
+		    :title, :author, :publication, :blurb, :ingredients, :method, 
 		    :serving, :cooking_time, :prep_time
-		)
+		) RETURNING *;
 	`
-	_, err := r.db.NamedExecContext(ctx, query, recipe)
+	stmt, err := r.db.PrepareNamedContext(ctx, query)
 	if err != nil {
-		return err
+		log.Printf("Failed to prepare statement: %v", err)
+		return nil, err
 	}
 
-	return nil
+	err = stmt.GetContext(ctx, &inserted, recipe)
+	return &inserted, err
 }
 
 func (r recipesRepo) GetRecipesBySearchQuery(ctx context.Context, search string) ([]dto.RecipeSearchResult, error) {

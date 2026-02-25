@@ -25,8 +25,6 @@ const (
 // IngredientParserClient is the client API for IngredientParser service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-//
-// The service definition
 type IngredientParserClient interface {
 	Parse(ctx context.Context, in *ParseRequest, opts ...grpc.CallOption) (*ParseResponse, error)
 }
@@ -52,8 +50,6 @@ func (c *ingredientParserClient) Parse(ctx context.Context, in *ParseRequest, op
 // IngredientParserServer is the server API for IngredientParser service.
 // All implementations must embed UnimplementedIngredientParserServer
 // for forward compatibility.
-//
-// The service definition
 type IngredientParserServer interface {
 	Parse(context.Context, *ParseRequest) (*ParseResponse, error)
 	mustEmbedUnimplementedIngredientParserServer()

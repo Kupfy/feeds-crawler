@@ -21,7 +21,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Request message
 type ParseRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Raw           string                 `protobuf:"bytes,1,opt,name=raw,proto3" json:"raw,omitempty"`
@@ -66,7 +65,6 @@ func (x *ParseRequest) GetRaw() string {
 	return ""
 }
 
-// Response message
 type ParseResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          []*ConfidenceText      `protobuf:"bytes,1,rep,name=name,proto3" json:"name,omitempty"`
@@ -151,15 +149,16 @@ func (x *ParseResponse) GetPurpose() *ConfidenceText {
 	return nil
 }
 
-// Helper messages
 type Amount struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Quantity      string                 `protobuf:"bytes,1,opt,name=quantity,proto3" json:"quantity,omitempty"`
-	Unit          string                 `protobuf:"bytes,2,opt,name=unit,proto3" json:"unit,omitempty"`
-	Text          string                 `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
-	Confidence    float32                `protobuf:"fixed32,4,opt,name=confidence,proto3" json:"confidence,omitempty"`
-	Approximate   bool                   `protobuf:"varint,5,opt,name=approximate,proto3" json:"approximate,omitempty"`
-	Singular      bool                   `protobuf:"varint,6,opt,name=singular,proto3" json:"singular,omitempty"`
+	QuantityMax   string                 `protobuf:"bytes,2,opt,name=quantity_max,json=quantityMax,proto3" json:"quantity_max,omitempty"`
+	Unit          string                 `protobuf:"bytes,3,opt,name=unit,proto3" json:"unit,omitempty"`
+	Text          string                 `protobuf:"bytes,4,opt,name=text,proto3" json:"text,omitempty"`
+	Singular      bool                   `protobuf:"varint,5,opt,name=singular,proto3" json:"singular,omitempty"`
+	Approximate   bool                   `protobuf:"varint,6,opt,name=approximate,proto3" json:"approximate,omitempty"`
+	Range         bool                   `protobuf:"varint,7,opt,name=range,proto3" json:"range,omitempty"`
+	Confidence    float32                `protobuf:"fixed32,8,opt,name=confidence,proto3" json:"confidence,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -201,6 +200,13 @@ func (x *Amount) GetQuantity() string {
 	return ""
 }
 
+func (x *Amount) GetQuantityMax() string {
+	if x != nil {
+		return x.QuantityMax
+	}
+	return ""
+}
+
 func (x *Amount) GetUnit() string {
 	if x != nil {
 		return x.Unit
@@ -215,11 +221,11 @@ func (x *Amount) GetText() string {
 	return ""
 }
 
-func (x *Amount) GetConfidence() float32 {
+func (x *Amount) GetSingular() bool {
 	if x != nil {
-		return x.Confidence
+		return x.Singular
 	}
-	return 0
+	return false
 }
 
 func (x *Amount) GetApproximate() bool {
@@ -229,11 +235,18 @@ func (x *Amount) GetApproximate() bool {
 	return false
 }
 
-func (x *Amount) GetSingular() bool {
+func (x *Amount) GetRange() bool {
 	if x != nil {
-		return x.Singular
+		return x.Range
 	}
 	return false
+}
+
+func (x *Amount) GetConfidence() float32 {
+	if x != nil {
+		return x.Confidence
+	}
+	return 0
 }
 
 type ConfidenceText struct {
@@ -307,16 +320,18 @@ const file_ingredientparser_proto_rawDesc = "" +
 	"\n" +
 	"\b_commentB\n" +
 	"\n" +
-	"\b_purpose\"\xaa\x01\n" +
+	"\b_purpose\"\xe3\x01\n" +
 	"\x06Amount\x12\x1a\n" +
-	"\bquantity\x18\x01 \x01(\tR\bquantity\x12\x12\n" +
-	"\x04unit\x18\x02 \x01(\tR\x04unit\x12\x12\n" +
-	"\x04text\x18\x03 \x01(\tR\x04text\x12\x1e\n" +
+	"\bquantity\x18\x01 \x01(\tR\bquantity\x12!\n" +
+	"\fquantity_max\x18\x02 \x01(\tR\vquantityMax\x12\x12\n" +
+	"\x04unit\x18\x03 \x01(\tR\x04unit\x12\x12\n" +
+	"\x04text\x18\x04 \x01(\tR\x04text\x12\x1a\n" +
+	"\bsingular\x18\x05 \x01(\bR\bsingular\x12 \n" +
+	"\vapproximate\x18\x06 \x01(\bR\vapproximate\x12\x14\n" +
+	"\x05range\x18\a \x01(\bR\x05range\x12\x1e\n" +
 	"\n" +
-	"confidence\x18\x04 \x01(\x02R\n" +
-	"confidence\x12 \n" +
-	"\vapproximate\x18\x05 \x01(\bR\vapproximate\x12\x1a\n" +
-	"\bsingular\x18\x06 \x01(\bR\bsingular\"D\n" +
+	"confidence\x18\b \x01(\x02R\n" +
+	"confidence\"D\n" +
 	"\x0eConfidenceText\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x1e\n" +
 	"\n" +

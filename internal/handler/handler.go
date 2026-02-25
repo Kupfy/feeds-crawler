@@ -53,12 +53,13 @@ func (h *handler) ProcessRecipeFromPage(c *gin.Context) {
 		return
 	}
 
-	if err := h.recipeService.ProcessRecipeByUrl(c.Request.Context(), req.Url); err != nil {
+	recipe, err := h.recipeService.ProcessRecipeByUrl(c.Request.Context(), req.Url)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{})
+	c.JSON(http.StatusOK, *recipe)
 }
 
 func (h *handler) SearchRecipes(c *gin.Context) {

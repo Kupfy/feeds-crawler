@@ -3,17 +3,14 @@ option go_package = "github.com/Kupfy/feeds-crawler/ingredientparser";
 
 //package ingredientsparser;
 
-// The service definition
 service IngredientParser {
   rpc Parse(ParseRequest) returns (ParseResponse) {}
 }
 
-// Request message
 message ParseRequest {
   string raw = 1;
 }
 
-// Response message
 message ParseResponse {
   repeated ConfidenceText name = 1;
   optional ConfidenceText size = 2;
@@ -23,14 +20,15 @@ message ParseResponse {
   optional ConfidenceText purpose = 6;
 }
 
-// Helper messages
 message Amount {
   string quantity = 1;
-  string unit = 2;
-  string text = 3;
-  float confidence = 4;
-  bool approximate = 5;
-  bool singular = 6;
+  string quantity_max = 2;
+  string unit = 3;
+  string text = 4;
+  bool singular = 5;
+  bool approximate = 6;
+  bool range = 7;
+  float confidence = 8;
 }
 
 message ConfidenceText {
