@@ -3,9 +3,11 @@ package handler
 import (
 	"net/http"
 
-	"github.com/Kupfy/feeds-crawler/internal/data/dto"
+	"github.com/Kupfy/feeds-crawler/internal/data/domain"
+	"github.com/Kupfy/feeds-crawler/internal/data/request"
 	"github.com/Kupfy/feeds-crawler/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type Handler interface {
@@ -13,7 +15,9 @@ type Handler interface {
 	GetCrawl(c *gin.Context)
 	ProcessRecipeFromPage(c *gin.Context)
 	SearchRecipes(c *gin.Context)
+	GetTopRecipes(c *gin.Context)
 	GetRecipeByID(c *gin.Context)
+	GetRecipeBySlug(c *gin.Context)
 }
 
 type handler struct {
@@ -28,7 +32,7 @@ func NewHandler(
 }
 
 func (h *handler) StartCrawl(c *gin.Context) {
-	var req dto.StartCrawlRequest
+	var req request.StartCrawlRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -47,7 +51,7 @@ func (h *handler) GetCrawl(c *gin.Context) {
 }
 
 func (h *handler) ProcessRecipeFromPage(c *gin.Context) {
-	var req dto.RecipeExtractionRequest
+	var req request.RecipeExtractionRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -63,9 +67,49 @@ func (h *handler) ProcessRecipeFromPage(c *gin.Context) {
 }
 
 func (h *handler) SearchRecipes(c *gin.Context) {
+	var body request.SearchRequest
+	if err := c.BindQuery(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
 
+	recipes, err := h.recipeService.SearchRecipes(c.Request.Context(), body)
+	if err != nil {
+		domain.ToHTTPError(c.Writer, err)
+		return
+	}
+	c.JSON(http.StatusOK, recipes)
+}
+
+func (h *handler) GetTopRecipes(c *gin.Context) {
+	recipes, err := h.recipeService.GetTopRecipes(c.Request.Context(), 10)
+	if err != nil {
+		domain.ToHTTPError(c.Writer, err)
+		return
+	}
+	c.JSON(http.StatusOK, recipes)
 }
 
 func (h *handler) GetRecipeByID(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	recipe, err := h.recipeService.GetRecipeByID(c.Request.Context(), id)
+	if err != nil {
+		domain.ToHTTPError(c.Writer, err)
+		return
+	}
+	c.JSON(http.StatusOK, recipe)
+}
 
+func (h *handler) GetRecipeBySlug(c *gin.Context) {
+	slug := c.Param("slug")
+	recipe, err := h.recipeService.GetRecipeBySlug(c.Request.Context(), slug)
+	if err != nil {
+		domain.ToHTTPError(c.Writer, err)
+		return
+	}
+	c.JSON(http.StatusOK, recipe)
 }

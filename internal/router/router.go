@@ -36,7 +36,7 @@ func (r Router) SetupRoutes() {
 
 	// Protected router - require authentication
 	protected := v1.Group("")
-	protected.Use(r.authMiddleware.RequireAuth())
+	protected.Use(r.authMiddleware.OptionalAuth())
 	{
 		// User router
 		r.setupUserRoutes(protected)
@@ -45,7 +45,8 @@ func (r Router) SetupRoutes() {
 
 // setupUserRoutes configures user-related router
 func (r Router) setupUserRoutes(rg *gin.RouterGroup) {
-	crawl := rg.Group("/crawl")
+	crawl := rg.Group("/crawls")
+	crawl.Use(r.authMiddleware.RequireAuth())
 	{
 		// POST /api/v1/crawl
 		// Body: CreateUserRequest (JSON)
@@ -54,16 +55,21 @@ func (r Router) setupUserRoutes(rg *gin.RouterGroup) {
 
 		// GET /api/v1/crawl
 		// Get crawl by filters
-		crawl.GET("", r.userHandler.GetCrawl)
+		crawl.GET("/search", r.userHandler.GetCrawl)
 	}
 
-	recipe := rg.Group("/recipe")
+	recipe := rg.Group("/recipes")
 	{
 		recipe.POST("/from-path", r.userHandler.ProcessRecipeFromPage)
+		//Use(r.authMiddleware.RequireAuth())
 
 		recipe.GET("/search", r.userHandler.SearchRecipes)
 
 		recipe.GET("/:id", r.userHandler.GetRecipeByID)
+
+		recipe.GET("/slug/:slug", r.userHandler.GetRecipeBySlug)
+
+		recipe.GET("/top", r.userHandler.GetTopRecipes)
 	}
 }
 

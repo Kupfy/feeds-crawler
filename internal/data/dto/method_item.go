@@ -10,12 +10,9 @@ type Method []MethodItem
 
 func (m *Method) Scan(val interface{}) error {
 	var err error
-	//var mm Method
-	//mm := make([]MethodItem, 0)
 	switch v := val.(type) {
 	case []byte:
 		err = json.Unmarshal(v, m)
-		//*m = mm
 	case string:
 		err = json.Unmarshal([]byte(v), m)
 	default:

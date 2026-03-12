@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/Kupfy/feeds-crawler/internal/data/config"
-	"github.com/Kupfy/feeds-crawler/internal/data/dto"
 	"github.com/Kupfy/feeds-crawler/internal/data/entity"
 	"github.com/Kupfy/feeds-crawler/internal/data/enum/crawlstatus"
+	"github.com/Kupfy/feeds-crawler/internal/data/request"
 	"github.com/Kupfy/feeds-crawler/internal/messaging"
 	"github.com/Kupfy/feeds-crawler/internal/repository"
 	"github.com/Kupfy/feeds-crawler/internal/util"
@@ -36,7 +36,7 @@ type crawlJob struct {
 }
 
 type CrawlerService interface {
-	StartCrawl(ctx context.Context, req dto.StartCrawlRequest) (uuid.UUID, error)
+	StartCrawl(ctx context.Context, req request.StartCrawlRequest) (uuid.UUID, error)
 	GetJobStatus(ctx context.Context, jobID uuid.UUID) (entity.Crawl, error)
 }
 
@@ -70,7 +70,7 @@ func NewCrawlerService(
 	}
 }
 
-func (s *crawlerService) StartCrawl(ctx context.Context, req dto.StartCrawlRequest) (uuid.UUID, error) {
+func (s *crawlerService) StartCrawl(ctx context.Context, req request.StartCrawlRequest) (uuid.UUID, error) {
 	if req.SeedURL == "" {
 		return uuid.Nil, errors.New("seed_url required")
 	}
@@ -137,7 +137,7 @@ func (s *crawlerService) GetJobStatus(ctx context.Context, jobID uuid.UUID) (ent
 	return cj, nil
 }
 
-func (s *crawlerService) runJob(ctx context.Context, job *crawlJob, req dto.StartCrawlRequest) error {
+func (s *crawlerService) runJob(ctx context.Context, job *crawlJob, req request.StartCrawlRequest) error {
 	maxDepth := req.MaxDepth
 	if maxDepth == 0 {
 		maxDepth = s.cfg.DefaultMaxDepth
@@ -206,7 +206,7 @@ func (s *crawlerService) runJob(ctx context.Context, job *crawlJob, req dto.Star
 }
 
 func (s *crawlerService) performLogin(ctx context.Context,
-	jar *cookiejar.Jar, host string, job *crawlJob, login *dto.LoginCredentials,
+	jar *cookiejar.Jar, host string, job *crawlJob, login *request.LoginCredentials,
 ) error {
 	if login == nil || login.LoginURL == "" {
 		return nil

@@ -48,15 +48,17 @@ CREATE TABLE IF NOT EXISTS links (
 
 CREATE TABLE IF NOT EXISTS recipes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT UNIQUE,
     title TEXT,
     author TEXT,
     publication TEXT,
     blurb TEXT,
     ingredients JSONB,
     method JSONB,
-    serving INTEGER,
+    serving JSONB,
     cooking_time INTEGER,
-    prep_time INTEGER
+    prep_time INTEGER,
+    note TEXT,
 );
 
 CREATE INDEX idx_recipes_ingredients_gin_path

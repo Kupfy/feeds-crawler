@@ -90,29 +90,14 @@ func main() {
 	publicHandler := handler.NewHandler(crawlerService, recipeService)
 	publicRouter := router.NewRouter(engine, middleware.NewAuthMiddleware(cfg.JwtSecret), publicHandler)
 
-	//if err = ingredientsService.LoadIngredients(context.Background()); err != nil {
-	//	log.Fatal("Failed to load ingredients")
-	//}
-	//
-	//
-
 	// Setup router
 	publicRouter.SetupRoutes()
 
+	workerPool := messaging.NewWorkerPool(queue, recipeService.ProcessRecipeMessage, cfg.QueueWorkers, cfg.QueueTimeout)
+
 	// Spawn multiple workers
 	if cfg.FeatureFlags.IsEnabled("recipe_extractor_workers") {
-		go func() {
-			numWorkers := 5
-			for i := 0; i < numWorkers; i++ {
-				go func(workerID int) {
-					ctx := context.Background()
-					log.Printf("Worker %d started", workerID)
-					recipeService.ProcessRecipeMessage(ctx)
-				}(i)
-			}
-
-			monitorQueue(queue)
-		}()
+		workerPool.Start(context.Background())
 	}
 
 	// Start server
@@ -131,7 +116,7 @@ func monitorQueue(q messaging.RedisQueue) {
 		size, _ := q.Size(ctx)
 		log.Printf("Queue size: %d jobs pending", size)
 
-		// Peek at next job
+		// Peek at the next job
 		job, _ := q.Peek(ctx)
 		if job != nil {
 			log.Printf("Next job: %s (enqueued %v ago)",

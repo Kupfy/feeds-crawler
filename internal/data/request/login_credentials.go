@@ -1,4 +1,4 @@
-package dto
+package request
 
 type LoginCredentials struct {
 	LoginURL         string            `json:"loginUrl,omitempty"`

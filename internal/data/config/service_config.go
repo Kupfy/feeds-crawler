@@ -22,6 +22,7 @@ type ServiceConfig struct {
 	RedisHost             string        `envconfig:"REDIS_HOST" default:"redis"`
 	RedisPort             string        `envconfig:"REDIS_PORT" default:"6379"`
 	IngredientServiceAddr string        `envconfig:"INGREDIENT_SERVICE_ADDR" default:"ingredient-parser:50051"`
+	QueueWorkers          int           `envconfig:"QUEUE_WORKERS" default:"5"`
 	QueueTimeout          time.Duration `envconfig:"QUEUE_TIMEOUT_SECONDS" default:"30s"`
 	DefaultConcurrency    int           `envconfig:"DEFAULT_CONCURRENCY" default:"8"`
 	DefaultMaxDepth       int           `envconfig:"DEFAULT_MAX_DEPTH" default:"5"`

@@ -1,4 +1,4 @@
-package dto
+package request
 
 type StartCrawlRequest struct {
 	SeedURL              string            `json:"seedUrl" binding:"required"`

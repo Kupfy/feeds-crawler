@@ -6,6 +6,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Kupfy/feeds-crawler/internal/data/dto"
+)
+
+var (
+	servesRegex = regexp.MustCompile(`(?i)serves?\s+(\d+)(?:\s*[-–]\s*(\d+))?(?:\s+as\s+(?:a|an)\s+(.+))?`)
+	makesRegex  = regexp.MustCompile(`(?i)makes?\s+(\d+)\s+(.+)`)
+	yieldRegex  = regexp.MustCompile(`(?i)yield:?\s+(\d+)\s+(.+)`)
 )
 
 // ParseDuration parses human-ish time strings into time.Duration.
@@ -38,6 +46,44 @@ func ParseDuration(input string) (time.Duration, error) {
 	}
 
 	return duration, nil
+}
+
+func ParseServing(text string) *dto.Serving {
+	text = strings.TrimSpace(text)
+	var quantity int
+	var course, makes string
+
+	// --- SERVES ---
+	if matches := servesRegex.FindStringSubmatch(text); len(matches) > 0 {
+		quantity, _ = strconv.Atoi(matches[1])
+
+		// If range use upper bound
+		if matches[2] != "" {
+			if upper, err := strconv.Atoi(matches[2]); err == nil {
+				quantity = upper
+			}
+		}
+
+		if len(matches) > 3 {
+			course = strings.TrimSpace(matches[3])
+		}
+	}
+
+	// --- MAKES ---
+	if matches := makesRegex.FindStringSubmatch(text); len(matches) > 0 {
+		makes = strings.TrimSpace(strings.Join(matches[1:], " "))
+	}
+
+	// --- YIELD ---
+	if matches := yieldRegex.FindStringSubmatch(text); len(matches) > 0 {
+		makes = strings.TrimSpace(strings.Join(matches[1:], " "))
+	}
+
+	return &dto.Serving{
+		Quantity: quantity,
+		Course:   course,
+		Makes:    makes,
+	}
 }
 
 func ExtractNumber(text string) (float64, error) {

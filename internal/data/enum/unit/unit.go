@@ -18,49 +18,75 @@ func (u Unit) String() string {
 
 var (
 	Gram       = Unit{value: "g", rank: 1}
-	Millilitre = Unit{value: "mL", rank: 2}
-	Teaspoon   = Unit{value: "tsp", rank: 3}
-	Tablespoon = Unit{value: "tbsp", rank: 4}
-	Cups       = Unit{value: "cup", rank: 5}
-	Cloves     = Unit{value: "clove", rank: 6}
-	Pinch      = Unit{value: "pinch", rank: 7}
-	Bunch      = Unit{value: "bunch", rank: 8}
-	ToTaste    = Unit{value: "to taste", rank: 9}
-	Piece      = Unit{value: "", rank: 10}
+	Kilogram   = Unit{value: "Kg", rank: 2}
+	Ounce      = Unit{value: "oz", rank: 3}
+	Pound      = Unit{value: "lb", rank: 4}
+	Millilitre = Unit{value: "mL", rank: 5}
+	Litre      = Unit{value: "L", rank: 6}
+	FluidOunce = Unit{value: "fl oz", rank: 7}
+	Teaspoon   = Unit{value: "tsp", rank: 8}
+	Tablespoon = Unit{value: "tbsp", rank: 9}
+	Cups       = Unit{value: "cup", rank: 10}
+	Cloves     = Unit{value: "clove", rank: 11}
+	Pinch      = Unit{value: "pinch", rank: 12}
+	Bunch      = Unit{value: "bunch", rank: 13}
+	ToTaste    = Unit{value: "to taste", rank: 14}
+	Piece      = Unit{value: "", rank: 15}
 )
 
 func NewUnit(kind string) Unit {
-	tokens := tokenize(kind)
+	tokens := tokenize(strings.ToLower(kind))
 
 	var u Unit
 	for i, token := range tokens {
 		u = map[string]Unit{
-			"g":           Gram,
-			"gram":        Gram,
-			"grams":       Gram,
-			"ml":          Millilitre,
-			"mL":          Millilitre,
-			"millilitre":  Millilitre,
-			"millilitres": Millilitre,
-			"tsp":         Teaspoon,
-			"teaspoon":    Teaspoon,
-			"teaspoons":   Teaspoon,
-			"tbsp":        Tablespoon,
-			"tablespoon":  Tablespoon,
-			"tablespoons": Tablespoon,
-			"cup":         Cups,
-			"cups":        Cups,
-			"clove":       Cloves,
-			"cloves":      Cloves,
-			"a clove":     Cloves,
-			"pinch":       Pinch,
-			"a pinch":     Pinch,
-			"pinches":     Pinch,
-			"bunch":       Bunch,
-			"a bunch":     Bunch,
-			"bunches":     Bunch,
-			"to taste":    ToTaste,
-			"":            Piece,
+			"g":            Gram,
+			"kg":           Kilogram,
+			"gram":         Gram,
+			"grams":        Gram,
+			"kilogram":     Kilogram,
+			"kilograms":    Kilogram,
+			"oz":           Ounce,
+			"ounce":        Ounce,
+			"ounces":       Ounce,
+			"lb":           Pound,
+			"pound":        Pound,
+			"pounds":       Pound,
+			"ml":           Millilitre,
+			"mL":           Millilitre,
+			"milliliter":   Millilitre,
+			"millilitre":   Millilitre,
+			"millilitres":  Millilitre,
+			"milliliters":  Millilitre,
+			"l":            Litre,
+			"litre":        Litre,
+			"litres":       Litre,
+			"liter":        Litre,
+			"liters":       Litre,
+			"fl oz":        FluidOunce,
+			"fl ounce":     FluidOunce,
+			"fl ounces":    FluidOunce,
+			"fluid ounce":  FluidOunce,
+			"fluid ounces": FluidOunce,
+			"tsp":          Teaspoon,
+			"teaspoon":     Teaspoon,
+			"teaspoons":    Teaspoon,
+			"tbsp":         Tablespoon,
+			"tablespoon":   Tablespoon,
+			"tablespoons":  Tablespoon,
+			"cup":          Cups,
+			"cups":         Cups,
+			"clove":        Cloves,
+			"cloves":       Cloves,
+			"a clove":      Cloves,
+			"pinch":        Pinch,
+			"a pinch":      Pinch,
+			"pinches":      Pinch,
+			"bunch":        Bunch,
+			"a bunch":      Bunch,
+			"bunches":      Bunch,
+			"to taste":     ToTaste,
+			"":             Piece,
 		}[token]
 
 		if u.value != "" {
